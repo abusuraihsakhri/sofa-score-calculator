@@ -1,22 +1,17 @@
 # SOFA Score Calculator
 
-> **Domain:** Clinical Decision Support & Biomedical Computing  
-> **Reference Guidelines & Standards:** `Standard Clinical Formulations & ISO/IEC Quality Frameworks`
+> **Domain:** Clinical Decision Support & Biomedical Computing
 
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
 
 </div>
 
 ---
 
-## 📖 What It Does
+## What It Does
 
 SOFA (Sequential Organ Failure Assessment) Score Calculator.
 
@@ -34,96 +29,140 @@ Stdlib only. No external dependencies.
 
 ---
 
-## ⚙️ Key Capabilities & Algorithmic Modules
+## Key Capabilities
 
-### 🔬 Core Algorithmic & Evaluation Engines
-
-- **`SofaResult`**: Complete SOFA assessment result.
-- **`QsofaResult`**: qSOFA bedside screening result.
-- **`Sepsis3Result`**: Sepsis-3 assessment result.
-
----
-
-## 📐 Mathematical Formulation & Logic
-
-```text
-  score = 0
-  score = max(score, 1)
-  score = max(score, 2)
-  score = max(score, 4)
-  score = max(score, 3)
-```
+- **Full SOFA Score (0-24):** Across 6 organ systems — Respiratory, Coagulation, Liver, Cardiovascular, CNS, Renal
+- **qSOFA Bedside Screening:** Quick 3-criteria assessment for sepsis risk
+- **SOFA Delta Tracking:** Change detection from baseline measurements
+- **Sepsis-3 Criteria Assessment:** Suspected infection + acute SOFA increase >= 2
+- **CSV Batch Processing:** Process multiple patients from a CSV file
 
 ---
 
-## 💻 CLI Quickstart & Usage
+## Installation
 
-### 1. Guided Interactive Mode
-```bash
-python cli.py
-```
-
-### 2. Direct Parameterized Evaluation
-```bash
-python cli.py --pao2-fio2 <value> --mechanical-ventilation <value> --platelets <value> --bilirubin <value>
-```
-
-### Parameter Reference
-- `--pao2-fio2`: Specifies input measurement or parameter value.
-- `--mechanical-ventilation`: Specifies input measurement or parameter value.
-- `--platelets`: Specifies input measurement or parameter value.
-- `--bilirubin`: Specifies input measurement or parameter value.
-- `--map`: Specifies input measurement or parameter value.
-- `--dopamine`: Specifies input measurement or parameter value.
-- `--dobutamine`: Specifies input measurement or parameter value.
-- `--norepinephrine`: Specifies input measurement or parameter value.
-- `--epinephrine`: Specifies input measurement or parameter value.
-- `--gcs`: Specifies input measurement or parameter value.
-
-### Input Data Schema
-
-| Field | Description | Requirement |
-|:------|:------------|:------------|
-| `pao2_fio2` | Parameter / observation metric | Required |
-| `mechanical_ventilation` | Parameter / observation metric | Required |
-| `platelets` | Parameter / observation metric | Required |
-| `bilirubin` | Parameter / observation metric | Required |
-| `map_mmhg` | Parameter / observation metric | Required |
-| `dopamine` | Parameter / observation metric | Required |
-| `dobutamine` | Parameter / observation metric | Required |
-| `norepinephrine` | Parameter / observation metric | Required |
-
----
-
-## 🛡️ Security & Enterprise Architecture
-
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
-
----
-
-## 🧪 Testing & Verification
-
-Run the automated test suite:
+No installation required — uses Python stdlib only. Requires Python 3.10+.
 
 ```bash
-pytest -v
-```
-
-Execute high-throughput batch simulation benchmarks:
-
-```bash
-python simulator.py --tasks 1000 --concurrency 8
+git clone https://github.com/abusuraihsakhri/sofa-score-calculator.git
+cd sofa-score-calculator
 ```
 
 ---
 
-## 🐳 Container Deployment
+## Usage
+
+### 1. Full SOFA Score (single patient)
 
 ```bash
-docker build -t sofa-score-calculator .
-docker run -p 8000:8000 sofa-score-calculator
+python cli.py sofa --pao2-fio2 180 --mechanical-ventilation --platelets 80 --bilirubin 2.5 --map 60 --norepinephrine 0.15 --gcs 10 --creatinine 3.0
 ```
+
+JSON output:
+```bash
+python cli.py sofa --json --pao2-fio2 180 --mechanical-ventilation --platelets 80 --gcs 15
+```
+
+### 2. qSOFA Bedside Screening
+
+```bash
+python cli.py qsofa --respiratory-rate 26 --gcs 13 --systolic-bp 95
+```
+
+### 3. Sepsis-3 Criteria Assessment
+
+```bash
+python cli.py sepsis --pao2-fio2 180 --mechanical-ventilation --platelets 80 --map 60 --norepinephrine 0.15 --gcs 10 --creatinine 3.0 --suspected-infection --respiratory-rate 26 --systolic-bp 95
+```
+
+### 4. Batch CSV Processing
+
+```bash
+python cli.py batch -i sample.csv -o results.csv
+```
+
+Input CSV must include column headers matching the parameter names:
+`pao2_fio2`, `platelets`, `bilirubin`, `gcs`, etc. (see `sample.csv` for format).
+
+Empty cells are treated as normal/default values.
+
+### Parameters
+
+| Parameter | Description | Default |
+|:----------|:------------|:--------|
+| `--pao2-fio2` | PaO2/FiO2 ratio (mmHg) | Required |
+| `--mechanical-ventilation` | Patient on mechanical ventilation | False |
+| `--platelets` | Platelet count (×10³/µL) | 999 (normal) |
+| `--bilirubin` | Total bilirubin (mg/dL) | 0.0 |
+| `--map` | Mean arterial pressure (mmHg) | None |
+| `--dopamine` | Dopamine dose (µg/kg/min) | None |
+| `--dobutamine` | Dobutamine dose (µg/kg/min) | None |
+| `--norepinephrine` | Norepinephrine dose (µg/kg/min) | None |
+| `--epinephrine` | Epinephrine dose (µg/kg/min) | None |
+| `--gcs` | Glasgow Coma Scale (3-15) | 15 |
+| `--creatinine` | Serum creatinine (mg/dL) | None |
+| `--urine-output` | Urine output (mL/day) | None |
+
+---
+
+## Testing
+
+Run the full test suite:
+
+```bash
+python -m pytest test_sofa.py -v
+```
+
+Or with unittest:
+
+```bash
+python -m unittest test_sofa -v
+```
+
+---
+
+## Scoring Reference
+
+### SOFA Sub-scores (each 0-4)
+
+| System | Parameter | 0 | 1 | 2 | 3 | 4 |
+|:-------|:----------|:-:|:-:|:-:|:-:|:-:|
+| Respiratory | PaO2/FiO2 | ≥400 | <400 | <300 | <200* | <100* |
+| Coagulation | Platelets | ≥150 | <150 | <100 | <50 | <20 |
+| Liver | Bilirubin | <1.2 | <2.0 | <6.0 | <12.0 | ≥12.0 |
+| Cardiovascular | MAP/Vasopressors | ≥70 | <70 | Dob/DA≤5 | DA≤15/NE≤0.1 | DA>15/NE>0.1 |
+| CNS | GCS | 15 | 13-14 | 10-12 | 6-9 | <6 |
+| Renal | Creatinine/UO | <1.2 | <2.0 | <3.5 | <5.0 | ≥5.0 |
+
+*With mechanical ventilation
+
+### qSOFA Criteria (each 0-1)
+
+- Respiratory rate ≥ 22
+- Altered mentation (GCS < 15)
+- Systolic BP ≤ 100
+
+Score ≥ 2 suggests sepsis risk.
+
+---
+
+## Project Structure
+
+```
+sofa-score-calculator/
+├── sofa.py          # Core scoring library
+├── cli.py           # Command-line interface
+├── test_sofa.py     # Test suite
+├── sample.csv       # Example batch input
+├── LICENSE          # MIT License
+├── README.md        # This file
+└── .github/
+    └── workflows/
+        ci.yml       # CI pipeline
+```
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.

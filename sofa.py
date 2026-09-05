@@ -23,6 +23,22 @@ from typing import Optional
 
 
 # ---------------------------------------------------------------------------
+# Input validation helpers
+# ---------------------------------------------------------------------------
+
+def _validate_non_negative(value: float | int, name: str) -> None:
+    """Raise ValueError if a physiological value is negative."""
+    if value < 0:
+        raise ValueError(f"{name} cannot be negative, got {value}")
+
+
+def _validate_gcs(gcs: int) -> None:
+    """Raise ValueError if GCS is outside the valid range of 3-15."""
+    if gcs < 3 or gcs > 15:
+        raise ValueError(f"GCS must be between 3 and 15, got {gcs}")
+
+
+# ---------------------------------------------------------------------------
 # Individual organ-system scoring functions
 # ---------------------------------------------------------------------------
 
@@ -30,12 +46,16 @@ def score_respiration(pao2_fio2: float, mechanical_ventilation: bool = False) ->
     """Respiratory sub-score (0-4) from PaO2/FiO2 ratio.
 
     Args:
-        pao2_fio2: PaO2/FiO2 ratio (mmHg).
+        pao2_fio2: PaO2/FiO2 ratio (mmHg). Must be non-negative.
         mechanical_ventilation: Whether the patient is on mechanical ventilation.
 
     Returns:
         Integer score 0-4.
+
+    Raises:
+        ValueError: If pao2_fio2 is negative.
     """
+    _validate_non_negative(pao2_fio2, "pao2_fio2")
     if pao2_fio2 >= 400:
         return 0
     if pao2_fio2 < 100 and mechanical_ventilation:
@@ -52,11 +72,15 @@ def score_coagulation(platelets: float) -> int:
     """Coagulation sub-score (0-4) from platelet count (×10³/µL).
 
     Args:
-        platelets: Platelet count in ×10³/µL.
+        platelets: Platelet count in ×10³/µL. Must be non-negative.
 
     Returns:
         Integer score 0-4.
+
+    Raises:
+        ValueError: If platelets is negative.
     """
+    _validate_non_negative(platelets, "platelets")
     if platelets >= 150:
         return 0
     if platelets < 20:
@@ -73,11 +97,15 @@ def score_liver(bilirubin: float) -> int:
     """Liver sub-score (0-4) from total bilirubin (mg/dL).
 
     Args:
-        bilirubin: Total bilirubin in mg/dL.
+        bilirubin: Total bilirubin in mg/dL. Must be non-negative.
 
     Returns:
         Integer score 0-4.
+
+    Raises:
+        ValueError: If bilirubin is negative.
     """
+    _validate_non_negative(bilirubin, "bilirubin")
     if bilirubin < 1.2:
         return 0
     if bilirubin >= 12.0:
@@ -115,6 +143,17 @@ def score_cardiovascular(
         Integer score 0-4.
     """
     score = 0
+
+    # Validate non-negative values
+    for name, val in [
+        ("map_mmhg", map_mmhg),
+        ("dopamine", dopamine),
+        ("dobutamine", dobutamine),
+        ("norepinephrine", norepinephrine),
+        ("epinephrine", epinephrine),
+    ]:
+        if val is not None:
+            _validate_non_negative(val, name)
 
     # MAP-based baseline
     if map_mmhg is not None and map_mmhg < 70:
@@ -158,7 +197,11 @@ def score_cns(gcs: int) -> int:
 
     Returns:
         Integer score 0-4.
+
+    Raises:
+        ValueError: If gcs is outside the valid range of 3-15.
     """
+    _validate_gcs(gcs)
     if gcs == 15:
         return 0
     if gcs >= 13:
@@ -188,6 +231,7 @@ def score_renal(
     score = 0
 
     if creatinine is not None:
+        _validate_non_negative(creatinine, "creatinine")
         if creatinine >= 5.0:
             score = max(score, 4)
         elif creatinine >= 3.5:
@@ -198,6 +242,7 @@ def score_renal(
             score = max(score, 1)
 
     if urine_output_ml_day is not None:
+        _validate_non_negative(urine_output_ml_day, "urine_output_ml_day")
         if urine_output_ml_day < 200:
             score = max(score, 4)
         elif urine_output_ml_day < 500:
@@ -328,13 +373,19 @@ def calculate_qsofa(
     """Calculate the quick SOFA (qSOFA) bedside screening score.
 
     Args:
-        respiratory_rate: Respiratory rate (breaths/min).
+        respiratory_rate: Respiratory rate (breaths/min). Must be non-negative.
         gcs: Glasgow Coma Scale (3-15); altered mentation = GCS < 15.
-        systolic_bp: Systolic blood pressure (mmHg).
+        systolic_bp: Systolic blood pressure (mmHg). Must be non-negative.
 
     Returns:
         QsofaResult with individual criteria and total score.
+
+    Raises:
+        ValueError: If respiratory_rate or systolic_bp is negative, or gcs is out of range.
     """
+    _validate_non_negative(respiratory_rate, "respiratory_rate")
+    _validate_gcs(gcs)
+    _validate_non_negative(systolic_bp, "systolic_bp")
     return QsofaResult(
         respiratory_rate_ge_22=respiratory_rate >= 22,
         altered_mentation=gcs < 15,

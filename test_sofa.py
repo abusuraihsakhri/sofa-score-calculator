@@ -318,8 +318,15 @@ class TestCNS(unittest.TestCase):
     def test_score_4(self):
         self.assertEqual(score_cns(3), 4)
 
-    def test_gcs_1(self):
-        self.assertEqual(score_cns(1), 4)
+    def test_gcs_below_range_raises(self):
+        """GCS below 3 is clinically invalid and must raise ValueError."""
+        with self.assertRaises(ValueError):
+            score_cns(1)
+
+    def test_gcs_above_range_raises(self):
+        """GCS above 15 is clinically invalid and must raise ValueError."""
+        with self.assertRaises(ValueError):
+            score_cns(16)
 
 
 # ======================================================================
@@ -997,6 +1004,167 @@ class TestCLI(unittest.TestCase):
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["sofa_total"], "0")
             self.assertEqual(int(rows[1]["sofa_total"]), 10)
+        finally:
+            os.unlink(inp_path)
+            if os.path.exists(out_path):
+                os.unlink(out_path)
+
+
+# ======================================================================
+# Input validation tests
+# ======================================================================
+class TestInputValidation(unittest.TestCase):
+    """Test that invalid inputs are properly rejected."""
+
+    def test_negative_pao2_fio2_raises(self):
+        with self.assertRaises(ValueError):
+            score_respiration(-10)
+
+    def test_negative_platelets_raises(self):
+        with self.assertRaises(ValueError):
+            score_coagulation(-5)
+
+    def test_negative_bilirubin_raises(self):
+        with self.assertRaises(ValueError):
+            score_liver(-1.0)
+
+    def test_negative_map_raises(self):
+        with self.assertRaises(ValueError):
+            score_cardiovascular(map_mmhg=-50)
+
+    def test_negative_dopamine_raises(self):
+        with self.assertRaises(ValueError):
+            score_cardiovascular(dopamine=-1.0)
+
+    def test_negative_dobutamine_raises(self):
+        with self.assertRaises(ValueError):
+            score_cardiovascular(dobutamine=-1.0)
+
+    def test_negative_norepinephrine_raises(self):
+        with self.assertRaises(ValueError):
+            score_cardiovascular(norepinephrine=-0.1)
+
+    def test_negative_epinephrine_raises(self):
+        with self.assertRaises(ValueError):
+            score_cardiovascular(epinephrine=-0.1)
+
+    def test_negative_creatinine_raises(self):
+        with self.assertRaises(ValueError):
+            score_renal(creatinine=-1.0)
+
+    def test_negative_urine_output_raises(self):
+        with self.assertRaises(ValueError):
+            score_renal(urine_output_ml_day=-100)
+
+    def test_gcs_too_low_raises(self):
+        with self.assertRaises(ValueError):
+            score_cns(2)
+
+    def test_gcs_too_high_raises(self):
+        with self.assertRaises(ValueError):
+            score_cns(16)
+
+    def test_gcs_valid_range_boundaries(self):
+        """GCS=3 and GCS=15 are valid boundaries."""
+        self.assertEqual(score_cns(3), 4)
+        self.assertEqual(score_cns(15), 0)
+
+    def test_qsofa_negative_rr_raises(self):
+        with self.assertRaises(ValueError):
+            calculate_qsofa(respiratory_rate=-5)
+
+    def test_qsofa_negative_sbp_raises(self):
+        with self.assertRaises(ValueError):
+            calculate_qsofa(respiratory_rate=16, systolic_bp=-10)
+
+    def test_qsofa_gcs_out_of_range_raises(self):
+        with self.assertRaises(ValueError):
+            calculate_qsofa(respiratory_rate=16, gcs=2)
+
+    def test_calculate_sofa_negative_pao2_raises(self):
+        with self.assertRaises(ValueError):
+            calculate_sofa(pao2_fio2=-100, platelets=200, gcs=15)
+
+    def test_calculate_sofa_gcs_out_of_range_raises(self):
+        with self.assertRaises(ValueError):
+            calculate_sofa(pao2_fio2=400, platelets=200, gcs=2)
+
+    def test_zero_values_are_valid(self):
+        """Zero is a valid value for parameters that can be zero."""
+        self.assertEqual(score_respiration(0), 2)  # <300, no vent
+        self.assertEqual(score_coagulation(0), 4)
+        self.assertEqual(score_liver(0), 0)
+        self.assertEqual(score_renal(creatinine=0), 0)
+        self.assertEqual(score_renal(urine_output_ml_day=0), 4)
+
+
+# ======================================================================
+# Batch CLI error handling tests
+# ======================================================================
+class TestBatchCLI(unittest.TestCase):
+    """Test batch command error handling."""
+
+    def test_batch_missing_file(self):
+        from cli import main
+        import io
+        import contextlib
+
+        f = io.StringIO()
+        with contextlib.redirect_stdout(f):
+            rc = main(["batch", "-i", "nonexistent_file_xyz.csv"])
+        self.assertEqual(rc, 1)
+
+    def test_batch_invalid_csv_data(self):
+        from cli import main
+        import os
+        import tempfile
+        import io
+        import contextlib
+
+        # CSV with invalid numeric data
+        csv_content = "pao2_fio2,platelets,gcs\nnot_a_number,200,15\n"
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, newline=""
+        ) as inp:
+            inp.write(csv_content)
+            inp_path = inp.name
+
+        out_path = inp_path.replace(".csv", "_out.csv")
+        try:
+            f = io.StringIO()
+            with contextlib.redirect_stdout(f):
+                rc = main(["batch", "-i", inp_path, "-o", out_path])
+            self.assertEqual(rc, 1)
+        finally:
+            os.unlink(inp_path)
+            if os.path.exists(out_path):
+                os.unlink(out_path)
+
+    def test_batch_valid_csv_still_works(self):
+        from cli import main
+        import os
+        import tempfile
+        import io
+        import contextlib
+
+        csv_content = (
+            "pao2_fio2,platelets,bilirubin,gcs\n"
+            "450,250,0.5,15\n"
+            "200,100,1.5,13\n"
+        )
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, newline=""
+        ) as inp:
+            inp.write(csv_content)
+            inp_path = inp.name
+
+        out_path = inp_path.replace(".csv", "_out.csv")
+        try:
+            f = io.StringIO()
+            with contextlib.redirect_stdout(f):
+                rc = main(["batch", "-i", inp_path, "-o", out_path])
+            self.assertEqual(rc, 0)
+            self.assertIn("Processed 2", f.getvalue())
         finally:
             os.unlink(inp_path)
             if os.path.exists(out_path):

@@ -11,6 +11,7 @@ import argparse
 import csv
 import json
 import sys
+from typing import Optional
 
 from sofa import (
     calculate_sofa,
@@ -171,49 +172,76 @@ def cmd_sepsis(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parse_float(row: dict, key: str, default: Optional[float] = None) -> Optional[float]:
+    """Parse a float value from a CSV row, returning default if empty."""
+    v = row.get(key, "")
+    if v == "" or v is None:
+        return default
+    try:
+        return float(v)
+    except ValueError:
+        raise ValueError(f"Invalid numeric value for '{key}': '{v}'")
+
+
+def _parse_int(row: dict, key: str, default: int = 15) -> int:
+    """Parse an int value from a CSV row, returning default if empty."""
+    v = row.get(key, "")
+    if v == "" or v is None:
+        return default
+    try:
+        return int(float(v))
+    except ValueError:
+        raise ValueError(f"Invalid integer value for '{key}': '{v}'")
+
+
+def _parse_bool(row: dict, key: str) -> bool:
+    """Parse a boolean value from a CSV row."""
+    v = str(row.get(key, "")).strip().lower()
+    return v in ("1", "true", "yes", "y")
+
+
 def cmd_batch(args: argparse.Namespace) -> int:
     """Handle the 'batch' subcommand — process a CSV of patient data."""
-    with open(args.input, newline="", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        fieldnames = list(reader.fieldnames or [])
-        rows = list(reader)
+    try:
+        with open(args.input, newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            fieldnames = list(reader.fieldnames or [])
+            rows = list(reader)
+    except FileNotFoundError:
+        print(f"Error: Input file not found: {args.input}", file=sys.stderr)
+        return 1
+    except PermissionError:
+        print(f"Error: Permission denied reading: {args.input}", file=sys.stderr)
+        return 1
+    except csv.Error as e:
+        print(f"Error: Malformed CSV in {args.input}: {e}", file=sys.stderr)
+        return 1
 
     out_fields = fieldnames + [
         "sofa_respiratory", "sofa_coagulation", "sofa_liver",
         "sofa_cardiovascular", "sofa_cns", "sofa_renal", "sofa_total",
     ]
     out_rows = []
-    for row in rows:
-        def _float(key, default=None):
-            v = row.get(key, "")
-            if v == "" or v is None:
-                return default
-            return float(v)
+    for i, row in enumerate(rows, start=2):  # start=2 because row 1 is header
+        try:
+            result = calculate_sofa(
+                pao2_fio2=_parse_float(row, "pao2_fio2", 400),
+                mechanical_ventilation=_parse_bool(row, "mechanical_ventilation"),
+                platelets=_parse_float(row, "platelets", 999),
+                bilirubin=_parse_float(row, "bilirubin", 0.0),
+                map_mmhg=_parse_float(row, "map_mmhg"),
+                dopamine=_parse_float(row, "dopamine"),
+                dobutamine=_parse_float(row, "dobutamine"),
+                norepinephrine=_parse_float(row, "norepinephrine"),
+                epinephrine=_parse_float(row, "epinephrine"),
+                gcs=_parse_int(row, "gcs", 15),
+                creatinine=_parse_float(row, "creatinine"),
+                urine_output_ml_day=_parse_float(row, "urine_output_ml_day"),
+            )
+        except (ValueError, TypeError) as e:
+            print(f"Error: Row {i}: {e}", file=sys.stderr)
+            return 1
 
-        def _int(key, default=15):
-            v = row.get(key, "")
-            if v == "" or v is None:
-                return default
-            return int(float(v))
-
-        def _bool(key):
-            v = str(row.get(key, "")).strip().lower()
-            return v in ("1", "true", "yes", "y")
-
-        result = calculate_sofa(
-            pao2_fio2=_float("pao2_fio2", 400),
-            mechanical_ventilation=_bool("mechanical_ventilation"),
-            platelets=_float("platelets", 999),
-            bilirubin=_float("bilirubin", 0.0),
-            map_mmhg=_float("map_mmhg"),
-            dopamine=_float("dopamine"),
-            dobutamine=_float("dobutamine"),
-            norepinephrine=_float("norepinephrine"),
-            epinephrine=_float("epinephrine"),
-            gcs=_int("gcs", 15),
-            creatinine=_float("creatinine"),
-            urine_output_ml_day=_float("urine_output_ml_day"),
-        )
         merged = dict(row)
         merged["sofa_respiratory"] = result.respiratory
         merged["sofa_coagulation"] = result.coagulation
@@ -224,10 +252,14 @@ def cmd_batch(args: argparse.Namespace) -> int:
         merged["sofa_total"] = result.total
         out_rows.append(merged)
 
-    with open(args.output, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=out_fields)
-        writer.writeheader()
-        writer.writerows(out_rows)
+    try:
+        with open(args.output, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=out_fields)
+            writer.writeheader()
+            writer.writerows(out_rows)
+    except PermissionError:
+        print(f"Error: Permission denied writing: {args.output}", file=sys.stderr)
+        return 1
 
     print(f"Processed {len(out_rows)} patients -> {args.output}")
     return 0
