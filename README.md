@@ -1,168 +1,84 @@
 # SOFA Score Calculator
 
-> **Domain:** Clinical Decision Support & Biomedical Computing
+An implementation of the **original SOFA (Sequential Organ Failure Assessment)** score and qSOFA, with a Python command-line interface, CSV batch processing, and an in-browser calculator using Pyodide.
 
-<div align="center">
+## Features
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
+- **SOFA (0–24)**: six component scores for respiration, coagulation, liver, cardiovascular system, CNS, and kidneys.
+- **qSOFA (0–3)**: respiratory rate, altered mentation, and systolic blood pressure.
+- **Change from baseline**: per-system and total SOFA difference, plus operational Sepsis-3 threshold assessment for suspected infection.
+- **Python CLI and CSV**: process one assessment or an entire local CSV file.
+- **Browser interface**: use the original Python `sofa.py` logic directly in the browser via a version-pinned Pyodide runtime; no server-side Python or API key.
 
-</div>
+## Clinical interpretation and limitations
 
----
+This project implements the **original SOFA score**, not SOFA-2. A SOFA increase of at least 2 in the setting of suspected infection is an operational Sepsis-3 criterion, not a substitute for clinical diagnosis. **Neither a low qSOFA nor a low SOFA rules out sepsis.** Current Surviving Sepsis Campaign guidance recommends NEWS/NEWS2, MEWS, or SIRS over qSOFA as the sole sepsis screening tool.
 
-## What It Does
+**Important:** The legacy Python API and normal-mode CLI retain historical defaults for omitted measurements (for compatibility). An omitted value must **not** be interpreted clinically as a measured normal value. Enter all available measurements and use `--strict` for clinical CSV datasets. The web interface requires inputs for every scoring domain and does not silently assume normal laboratory measurements. Confirm ventilatory support criteria, measurement timing, baseline organ dysfunction, and sedation effects on GCS before interpreting results.
 
-SOFA (Sequential Organ Failure Assessment) Score Calculator.
+This software is for education and research support, not standalone patient management.
 
-Implements the full SOFA score (0-24) across 6 organ systems, qSOFA bedside
-screening, SOFA delta tracking, and Sepsis-3 criteria assessment.
+## Using the browser application
 
-References:
-    Vincent JL, et al. "The SOFA score to describe organ dysfunction/failure."
-    Intensive Care Med. 1996; 22:707-710.
+Open the site when GitHub Pages is enabled for this repository, select **SOFA** or **qSOFA**, enter the clinical measurements in the stated units, and calculate. Baseline SOFA and suspected infection are optional inputs for viewing the operational Sepsis-3 threshold.
 
-    Singer M, et al. "The Third International Consensus Definitions for Sepsis
-    and Septic Shock (Sepsis-3)." JAMA. 2016; 315(8):801-810.
+The site processes entered measurements **locally in the browser**; it does not store or upload patient values. On initial load it downloads the Python runtime from jsDelivr and loads the local `sofa.py` file from the site. These asset requests have normal network metadata (such as IP address); no patient inputs are sent with them. Avoid entering identifiable patient data.
 
-Stdlib only. No external dependencies.
+Requires a modern browser with WebAssembly and JavaScript support and internet access to load the Pyodide runtime. Browser functionality is separate from the CLI and is not intended for offline use.
 
----
+## Python CLI
 
-## Key Capabilities
-
-- **Full SOFA Score (0-24):** Across 6 organ systems — Respiratory, Coagulation, Liver, Cardiovascular, CNS, Renal
-- **qSOFA Bedside Screening:** Quick 3-criteria assessment for sepsis risk
-- **SOFA Delta Tracking:** Change detection from baseline measurements
-- **Sepsis-3 Criteria Assessment:** Suspected infection + acute SOFA increase >= 2
-- **CSV Batch Processing:** Process multiple patients from a CSV file
-
----
-
-## Installation
-
-No installation required — uses Python stdlib only. Requires Python 3.10+.
+Requires **Python 3.10+**. Runtime dependencies: none.
 
 ```bash
 git clone https://github.com/abusuraihsakhri/sofa-score-calculator.git
 cd sofa-score-calculator
-```
 
----
+# Single assessment (provide actual measurements rather than relying on defaults)
+python cli.py sofa --pao2-fio2 180 --mechanical-ventilation \
+  --platelets 80 --bilirubin 2.5 --map 60 \
+  --norepinephrine 0.15 --gcs 10 --creatinine 3.0
 
-## Usage
+# Machine-readable output
+python cli.py sofa --pao2-fio2 280 --platelets 160 --bilirubin 0.8 \
+  --map 85 --gcs 15 --creatinine 0.9 --json
 
-### 1. Full SOFA Score (single patient)
-
-```bash
-python cli.py sofa --pao2-fio2 180 --mechanical-ventilation --platelets 80 --bilirubin 2.5 --map 60 --norepinephrine 0.15 --gcs 10 --creatinine 3.0
-```
-
-JSON output:
-```bash
-python cli.py sofa --json --pao2-fio2 180 --mechanical-ventilation --platelets 80 --gcs 15
-```
-
-### 2. qSOFA Bedside Screening
-
-```bash
+# qSOFA risk stratification
 python cli.py qsofa --respiratory-rate 26 --gcs 13 --systolic-bp 95
+
+# Operational Sepsis-3 criteria using supplied baseline measurements
+python cli.py sepsis --suspected-infection --pao2-fio2 180 \
+  --platelets 80 --gcs 10 --creatinine 3.0
+
+# Batch CSV (strict mode rejects missing key measurements)
+python cli.py batch -i sample.csv -o results.csv --strict
 ```
 
-### 3. Sepsis-3 Criteria Assessment
+The CSV header uses names such as `pao2_fio2`, `mechanical_ventilation`, `platelets`, `bilirubin`, `map_mmhg`, `dopamine`, `dobutamine`, `norepinephrine`, `epinephrine`, `gcs`, `creatinine`, and `urine_output_ml_day`. See [sample.csv](sample.csv).
 
-```bash
-python cli.py sepsis --pao2-fio2 180 --mechanical-ventilation --platelets 80 --map 60 --norepinephrine 0.15 --gcs 10 --creatinine 3.0 --suspected-infection --respiratory-rate 26 --systolic-bp 95
-```
+Use `--strict` with batch mode to require explicit respiratory, coagulation, hepatic and GCS entries, plus a MAP or vasoactive dose and a renal measurement. In non-strict batch mode, missing values still use legacy defaults. Existing output files may be replaced; source and destination cannot be the same file.
 
-### 4. Batch CSV Processing
+The CLI uses platelet units **×10³/µL**, bilirubin and creatinine **mg/dL**, vasoactive drug doses **µg/kg/min**, urine output **mL per 24 h**, and PaO₂/FiO₂ in **mmHg**. The six organ subscores each range from 0 to 4; their sum ranges from 0 to 24.
 
-```bash
-python cli.py batch -i sample.csv -o results.csv
-```
-
-Input CSV must include column headers matching the parameter names:
-`pao2_fio2`, `platelets`, `bilirubin`, `gcs`, etc. (see `sample.csv` for format).
-
-Empty cells are treated as normal/default values.
-
-### Parameters
-
-| Parameter | Description | Default |
-|:----------|:------------|:--------|
-| `--pao2-fio2` | PaO2/FiO2 ratio (mmHg) | Required |
-| `--mechanical-ventilation` | Patient on mechanical ventilation | False |
-| `--platelets` | Platelet count (×10³/µL) | 999 (normal) |
-| `--bilirubin` | Total bilirubin (mg/dL) | 0.0 |
-| `--map` | Mean arterial pressure (mmHg) | None |
-| `--dopamine` | Dopamine dose (µg/kg/min) | None |
-| `--dobutamine` | Dobutamine dose (µg/kg/min) | None |
-| `--norepinephrine` | Norepinephrine dose (µg/kg/min) | None |
-| `--epinephrine` | Epinephrine dose (µg/kg/min) | None |
-| `--gcs` | Glasgow Coma Scale (3-15) | 15 |
-| `--creatinine` | Serum creatinine (mg/dL) | None |
-| `--urine-output` | Urine output (mL/day) | None |
-
----
-
-## Testing
-
-Run the full test suite:
-
-```bash
-python -m pytest test_sofa.py -v
-```
-
-Or with unittest:
+## Development and testing
 
 ```bash
 python -m unittest test_sofa -v
+# Optional dev tools:
+python -m pip install pytest ruff
+python -m pytest -q
+ruff check . --select E,F,W
+node --test web-input.test.mjs
 ```
 
----
+The repository includes a Python matrix CI workflow, browser input tests, and a Pages deployment workflow. Static site files are `index.html`, `style.css`, `app.mjs`, `input.mjs`, and `sofa.py`. There is no Flask/FastAPI server; Python executes through WebAssembly (Pyodide) in the browser.
 
-## Scoring Reference
+## References
 
-### SOFA Sub-scores (each 0-4)
-
-| System | Parameter | 0 | 1 | 2 | 3 | 4 |
-|:-------|:----------|:-:|:-:|:-:|:-:|:-:|
-| Respiratory | PaO2/FiO2 | ≥400 | <400 | <300 | <200* | <100* |
-| Coagulation | Platelets | ≥150 | <150 | <100 | <50 | <20 |
-| Liver | Bilirubin | <1.2 | <2.0 | <6.0 | <12.0 | ≥12.0 |
-| Cardiovascular | MAP/Vasopressors | ≥70 | <70 | Dob/DA≤5 | DA≤15/NE≤0.1 | DA>15/NE>0.1 |
-| CNS | GCS | 15 | 13-14 | 10-12 | 6-9 | <6 |
-| Renal | Creatinine/UO | <1.2 | <2.0 | <3.5 | <5.0 | ≥5.0 |
-
-*With mechanical ventilation
-
-### qSOFA Criteria (each 0-1)
-
-- Respiratory rate ≥ 22
-- Altered mentation (GCS < 15)
-- Systolic BP ≤ 100
-
-Score ≥ 2 suggests sepsis risk.
-
----
-
-## Project Structure
-
-```
-sofa-score-calculator/
-├── sofa.py          # Core scoring library
-├── cli.py           # Command-line interface
-├── test_sofa.py     # Test suite
-├── sample.csv       # Example batch input
-├── LICENSE          # MIT License
-├── README.md        # This file
-└── .github/
-    └── workflows/
-        ci.yml       # CI pipeline
-```
-
----
+1. Vincent JL, Moreno R, Takala J, et al. The SOFA score to describe organ dysfunction/failure. *Intensive Care Medicine*. 1996;22:707–710.
+2. Singer M, Deutschman CS, Seymour CW, et al. The Third International Consensus Definitions for Sepsis and Septic Shock (Sepsis-3). *JAMA*. 2016;315:801–810.
+3. Society of Critical Care Medicine. [Surviving Sepsis Campaign: Adult Guidelines](https://www.sccm.org/survivingsepsiscampaign/guidelines-and-resources/surviving-sepsis-campaign-adult-guidelines).
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+[MIT](LICENSE).
