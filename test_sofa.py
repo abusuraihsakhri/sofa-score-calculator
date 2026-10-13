@@ -1227,7 +1227,7 @@ class TestSafetyRegressions(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "input.csv"
-            original = "pao2_fio2,platelets\\n450,250\n"
+            original = "pao2_fio2,platelets\n450,250\n"
             path.write_text(original, encoding="utf-8")
             self.assertEqual(main(["batch", "-i", str(path), "-o", str(path)]), 1)
             self.assertEqual(path.read_text(encoding="utf-8"), original)
@@ -1238,7 +1238,7 @@ class TestSafetyRegressions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "input.csv"
             dest = Path(directory) / "out.csv"
-            path.write_text("pao2_fio2,platelets,gcs\\n450,250,15\n", encoding="utf-8")
+            path.write_text("pao2_fio2,platelets,gcs\n450,250,15\n", encoding="utf-8")
             self.assertEqual(
                 main(["batch", "-i", str(path), "-o", str(dest), "--strict"]),
                 1,
