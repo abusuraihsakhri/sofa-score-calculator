@@ -275,7 +275,10 @@ class SofaResult:
     total: int = field(init=False)
 
     def __post_init__(self) -> None:
-        systems = ("respiratory", "coagulation", "liver", "cardiovascular", "cns", "renal")
+        systems = (
+            "respiratory", "coagulation", "liver",
+            "cardiovascular", "cns", "renal",
+        )
         for name in systems:
             value = getattr(self, name)
             if (isinstance(value, bool) or not isinstance(value, int)
