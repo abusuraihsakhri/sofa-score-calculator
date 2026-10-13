@@ -22,10 +22,11 @@ import unittest
 from pathlib import Path
 
 from sofa import (
+    QsofaResult,
+    SofaResult,
     assess_sepsis3,
     calculate_qsofa,
     calculate_sofa,
-    QsofaResult,
     score_cardiovascular,
     score_cns,
     score_coagulation,
@@ -33,7 +34,6 @@ from sofa import (
     score_renal,
     score_respiration,
     sofa_delta,
-    SofaResult,
 )
 
 
