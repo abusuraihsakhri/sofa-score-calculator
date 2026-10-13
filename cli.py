@@ -170,7 +170,7 @@ def cmd_sepsis(args: argparse.Namespace) -> int:
         if result.meets_criteria:
             print("  ** MEETS Sepsis-3 criteria (infection + SOFA increase >= 2)")
         else:
-            print("  Does not meet this operational threshold (does not exclude sepsis)")
+            print("  Operational threshold not met; does not exclude sepsis")
     return 0
 
 
@@ -246,15 +246,27 @@ def cmd_batch(args: argparse.Namespace) -> int:
             if None in row:
                 raise ValueError("More values than columns in CSV row")
             if args.strict:
-                required = ("pao2_fio2", "mechanical_ventilation", "platelets", "bilirubin", "gcs")
-                missing = [key for key in required if not str(row.get(key) or "").strip()]
+                required = (
+                    "pao2_fio2", "mechanical_ventilation", "platelets",
+                    "bilirubin", "gcs",
+                )
+                missing = [
+                    key for key in required if not str(row.get(key) or "").strip()
+                ]
                 if missing:
-                    raise ValueError("Missing required measurements: " + ", ".join(missing))
-                if not any(str(row.get(k) or "").strip() for k in
-                           ("map_mmhg", "dopamine", "dobutamine", "norepinephrine", "epinephrine")):
+                    raise ValueError(
+                        "Missing required measurements: " + ", ".join(missing)
+                    )
+                vaso_keys = (
+                    "map_mmhg", "dopamine", "dobutamine",
+                    "norepinephrine", "epinephrine",
+                )
+                if not any(str(row.get(k) or "").strip() for k in vaso_keys):
                     raise ValueError("Provide MAP or at least one vasoactive drug dose")
-                if not any(str(row.get(k) or "").strip() for k in
-                           ("creatinine", "urine_output_ml_day")):
+                if not any(
+                    str(row.get(k) or "").strip()
+                    for k in ("creatinine", "urine_output_ml_day")
+                ):
                     raise ValueError("Provide creatinine or 24-hour urine output")
             result = calculate_sofa(
                 pao2_fio2=_parse_float(row, "pao2_fio2", 400),
