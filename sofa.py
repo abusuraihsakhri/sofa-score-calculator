@@ -18,7 +18,8 @@ Stdlib only. No external dependencies.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+import math
+from dataclasses import asdict, dataclass, field
 from typing import Optional
 
 
@@ -28,14 +29,19 @@ from typing import Optional
 
 def _validate_non_negative(value: float | int, name: str) -> None:
     """Raise ValueError if a physiological value is negative."""
-    if value < 0:
-        raise ValueError(f"{name} cannot be negative, got {value}")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (float, int))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise ValueError(f"{name} must be a finite non-negative number, got {value!r}")
 
 
 def _validate_gcs(gcs: int) -> None:
     """Raise ValueError if GCS is outside the valid range of 3-15."""
-    if gcs < 3 or gcs > 15:
-        raise ValueError(f"GCS must be between 3 and 15, got {gcs}")
+    if isinstance(gcs, bool) or not isinstance(gcs, int) or not 3 <= gcs <= 15:
+        raise ValueError(f"GCS must be an integer between 3 and 15, got {gcs!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +62,8 @@ def score_respiration(pao2_fio2: float, mechanical_ventilation: bool = False) ->
         ValueError: If pao2_fio2 is negative.
     """
     _validate_non_negative(pao2_fio2, "pao2_fio2")
+    if not isinstance(mechanical_ventilation, bool):
+        raise ValueError("mechanical_ventilation must be a boolean")
     if pao2_fio2 >= 400:
         return 0
     if pao2_fio2 < 100 and mechanical_ventilation:
@@ -267,6 +275,15 @@ class SofaResult:
     total: int = field(init=False)
 
     def __post_init__(self) -> None:
+        systems = (
+            "respiratory", "coagulation", "liver",
+            "cardiovascular", "cns", "renal",
+        )
+        for name in systems:
+            value = getattr(self, name)
+            if (isinstance(value, bool) or not isinstance(value, int)
+                    or not 0 <= value <= 4):
+                raise ValueError(f"{name} must be an integer score between 0 and 4")
         self.total = (
             self.respiratory
             + self.coagulation
@@ -346,7 +363,7 @@ def calculate_sofa(
 
 @dataclass
 class QsofaResult:
-    """qSOFA bedside screening result."""
+    """qSOFA risk-stratification result; not a sepsis diagnosis or rule-out."""
     respiratory_rate_ge_22: bool
     altered_mentation: bool
     systolic_bp_le_100: bool
@@ -381,7 +398,7 @@ def calculate_qsofa(
         QsofaResult with individual criteria and total score.
 
     Raises:
-        ValueError: If respiratory_rate or systolic_bp is negative, or gcs is out of range.
+        ValueError: If respiratory rate, systolic BP or GCS is invalid.
     """
     _validate_non_negative(respiratory_rate, "respiratory_rate")
     _validate_gcs(gcs)

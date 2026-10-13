@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SOFA and qSOFA calculators using the original Python scoring library, entirely in your browser.">
+  <title>SOFA Score Calculator</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="header">
+      <div class="eyebrow">Clinical scoring · Original SOFA</div>
+      <h1>SOFA Score Calculator</h1>
+      <p>Calculate six-organ SOFA scores (0–24) or the three-item qSOFA (0–3). Uses the Python reference implementation locally in your browser.</p>
+      <p id="runtime-status" role="status" aria-live="polite" class="runtime">Loading the Python engine from the CDN…</p>
+    </header>
+    <div class="notice"><strong>Clinical limitation.</strong> Educational and research support only. Verify all measurements and local protocols. Neither SOFA nor qSOFA independently diagnoses or excludes sepsis; qSOFA is not recommended as the sole sepsis screening tool.</div>
+    <nav class="tabs" role="tablist" aria-label="Calculator">
+      <button type="button" role="tab" aria-selected="true" aria-controls="sofa-panel" data-target="sofa-panel">SOFA · 6 systems</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="qsofa-panel" data-target="qsofa-panel">qSOFA · 3 items</button>
+    </nav>
+    <section id="sofa-panel" role="tabpanel" aria-label="SOFA calculator">
+      <form data-mode="sofa" novalidate>
+        <div class="grid">
+          <fieldset class="group">
+            <legend>01 · Respiratory</legend>
+            <label for="pao2_fio2">PaO₂ / FiO₂ ratio <small>mmHg · required</small></label>
+            <input id="pao2_fio2" name="pao2_fio2" type="number" min="0" step="any" placeholder="e.g. 280" required>
+            <span class="label">Respiratory support (for 3–4 point tiers) <small>required</small></span>
+            <div class="radios"><label><input type="radio" name="mechanical_ventilation" value="yes" required> Yes</label><label><input type="radio" name="mechanical_ventilation" value="no"> No</label></div>
+          </fieldset>
+          <fieldset class="group">
+            <legend>02 · Coagulation</legend>
+            <label for="platelets">Platelets <small>×10³/µL · required</small></label>
+            <input id="platelets" name="platelets" type="number" min="0" step="any" placeholder="e.g. 150" required>
+          </fieldset>
+          <fieldset class="group">
+            <legend>03 · Liver</legend>
+            <label for="bilirubin">Total bilirubin <small>mg/dL · required</small></label>
+            <input id="bilirubin" name="bilirubin" type="number" min="0" step="any" placeholder="e.g. 1.2" required>
+          </fieldset>
+          <fieldset class="group">
+            <legend>04 · Cardiovascular</legend>
+            <label for="map_mmhg">Mean arterial pressure <small>mmHg</small></label>
+            <input id="map_mmhg" name="map_mmhg" type="number" min="0" step="any" placeholder="e.g. 80">
+            <p class="hint">Provide MAP or a vasopressor/inotrope dose. Leave drug doses blank only if not given. Doses: µg/kg/min.</p>
+            <div class="pair">
+              <div><label for="dopamine">Dopamine</label><input id="dopamine" name="dopamine" type="number" min="0" step="any" placeholder="0"></div>
+              <div><label for="dobutamine">Dobutamine</label><input id="dobutamine" name="dobutamine" type="number" min="0" step="any" placeholder="0"></div>
+              <div><label for="norepinephrine">Norepinephrine</label><input id="norepinephrine" name="norepinephrine" type="number" min="0" step="any" placeholder="0"></div>
+              <div><label for="epinephrine">Epinephrine</label><input id="epinephrine" name="epinephrine" type="number" min="0" step="any" placeholder="0"></div>
+            </div>
+          </fieldset>
+          <fieldset class="group">
+            <legend>05 · Central nervous system</legend>
+            <label for="sofa-gcs">Glasgow Coma Scale <small>3–15 · required</small></label>
+            <input id="sofa-gcs" name="gcs" type="number" min="3" max="15" step="1" placeholder="e.g. 15" required>
+            <p class="hint">Consider sedative effects when interpreting GCS.</p>
+          </fieldset>
+          <fieldset class="group">
+            <legend>06 · Renal</legend>
+            <label for="creatinine">Creatinine <small>mg/dL</small></label>
+            <input id="creatinine" name="creatinine" type="number" min="0" step="any" placeholder="e.g. 0.9">
+            <label for="urine_output_ml_day">24-hour urine output <small>mL/day</small></label>
+            <input id="urine_output_ml_day" name="urine_output_ml_day" type="number" min="0" step="any" placeholder="e.g. 1500">
+            <p class="hint">Enter at least one. The higher scoring criterion is used.</p>
+          </fieldset>
+        </div>
+        <fieldset class="group baseline">
+          <legend>Optional · Change from baseline</legend>
+          <div class="pair">
+            <div><label for="baseline">Previously established baseline SOFA <small>0–24</small></label><input id="baseline" name="baseline" type="number" min="0" max="24" step="1" placeholder="Leave blank if unknown"></div>
+            <div><label for="infection">Suspected infection</label><select id="infection" name="infection"><option value="">Not assessed</option><option value="yes">Yes</option><option value="no">No</option></select></div>
+          </div>
+          <p class="hint">A baseline of 0 must not be assumed for established organ dysfunction. The Sepsis-3 threshold is not a definitive diagnosis.</p>
+        </fieldset>
+        <button class="submit" type="submit" disabled>Calculate SOFA</button>
+        <pre id="sofa-result" class="result" role="status" aria-live="polite" hidden></pre>
+      </form>
+    </section>
+    <section id="qsofa-panel" role="tabpanel" aria-label="qSOFA calculator" hidden>
+      <form data-mode="qsofa" novalidate>
+        <div class="grid q-grid">
+          <div class="group"><label for="respiratory_rate">Respiratory rate <small>breaths/min · required</small></label><input name="respiratory_rate" id="respiratory_rate" type="number" min="0" step="1" placeholder="e.g. 22" required></div>
+          <div class="group"><label for="qsofa-gcs">Glasgow Coma Scale <small>3–15 · required</small></label><input name="gcs" id="qsofa-gcs" type="number" min="3" max="15" step="1" placeholder="e.g. 15" required></div>
+          <div class="group"><label for="systolic_bp">Systolic BP <small>mmHg · required</small></label><input name="systolic_bp" id="systolic_bp" type="number" min="0" step="1" placeholder="e.g. 110" required></div>
+        </div>
+        <button class="submit" type="submit" disabled>Calculate qSOFA</button>
+        <pre id="qsofa-result" class="result" role="status" aria-live="polite" hidden></pre>
+      </form>
+    </section>
+    <footer>
+      <p>No patient values are uploaded or saved by this page. The Python engine is downloaded from jsDelivr; first load requires internet access.</p>
+      <p><a href="https://github.com/abusuraihsakhri/sofa-score-calculator" target="_blank" rel="noopener noreferrer">Source code</a> · <a href="https://www.sccm.org/survivingsepsiscampaign/guidelines-and-resources/surviving-sepsis-campaign-adult-guidelines" target="_blank" rel="noopener noreferrer">Surviving Sepsis Campaign guidance</a></p>
+    </footer>
+  </main>
+</body>
+</html>

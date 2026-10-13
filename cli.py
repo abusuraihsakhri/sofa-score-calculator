@@ -10,15 +10,17 @@ Stdlib only.
 import argparse
 import csv
 import json
+import math
 import sys
+from pathlib import Path
 from typing import Optional
 
 from sofa import (
-    calculate_sofa,
-    calculate_qsofa,
-    sofa_delta,
-    assess_sepsis3,
     SofaResult,
+    assess_sepsis3,
+    calculate_qsofa,
+    calculate_sofa,
+    sofa_delta,
 )
 
 
@@ -129,7 +131,7 @@ def cmd_qsofa(args: argparse.Namespace) -> int:
         print(f"  Altered mental: {'Yes' if result.altered_mentation else 'No'}")
         print(f"  SBP <= 100:    {'Yes' if result.systolic_bp_le_100 else 'No'}")
         if result.suggests_sepsis:
-            print("  ** qSOFA >= 2 -- consider sepsis evaluation")
+            print("  ** qSOFA >= 2: increased risk; not a standalone sepsis diagnosis")
     return 0
 
 
@@ -159,7 +161,7 @@ def cmd_sepsis(args: argparse.Namespace) -> int:
         print(json.dumps(result.to_dict(), indent=2))
     else:
         delta = sofa_delta(baseline, current)
-        print(f"Sepsis-3 Assessment")
+        print("Sepsis-3 Assessment")
         print(f"  Suspected infection: {'Yes' if result.suspected_infection else 'No'}")
         print(f"  Baseline SOFA:      {baseline.total}")
         print(f"  Current SOFA:       {current.total}")
@@ -168,11 +170,13 @@ def cmd_sepsis(args: argparse.Namespace) -> int:
         if result.meets_criteria:
             print("  ** MEETS Sepsis-3 criteria (infection + SOFA increase >= 2)")
         else:
-            print("  OK Does NOT meet Sepsis-3 criteria")
+            print("  Operational threshold not met; does not exclude sepsis")
     return 0
 
 
-def _parse_float(row: dict, key: str, default: Optional[float] = None) -> Optional[float]:
+def _parse_float(
+    row: dict, key: str, default: Optional[float] = None
+) -> Optional[float]:
     """Parse a float value from a CSV row, returning default if empty."""
     v = row.get(key, "")
     if v == "" or v is None:
@@ -189,19 +193,30 @@ def _parse_int(row: dict, key: str, default: int = 15) -> int:
     if v == "" or v is None:
         return default
     try:
-        return int(float(v))
-    except ValueError:
+        number = float(v)
+        if not math.isfinite(number) or not number.is_integer():
+            raise ValueError("Non-integral value")
+        return int(number)
+    except (ValueError, TypeError):
         raise ValueError(f"Invalid integer value for '{key}': '{v}'")
 
 
 def _parse_bool(row: dict, key: str) -> bool:
     """Parse a boolean value from a CSV row."""
-    v = str(row.get(key, "")).strip().lower()
-    return v in ("1", "true", "yes", "y")
+    v = str(row.get(key, "") or "").strip().lower()
+    if v in ("", "0", "false", "no", "n"):
+        return False
+    if v in ("1", "true", "yes", "y"):
+        return True
+    raise ValueError(f"Invalid boolean value for '{key}': {v!r}")
 
 
 def cmd_batch(args: argparse.Namespace) -> int:
     """Handle the 'batch' subcommand — process a CSV of patient data."""
+    if Path(args.input).resolve() == Path(args.output).resolve():
+        print("Error: Input and output CSV paths must differ", file=sys.stderr)
+        return 1
+
     try:
         with open(args.input, newline="", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
@@ -217,13 +232,42 @@ def cmd_batch(args: argparse.Namespace) -> int:
         print(f"Error: Malformed CSV in {args.input}: {e}", file=sys.stderr)
         return 1
 
-    out_fields = fieldnames + [
+    if not fieldnames or not any(fieldnames):
+        print("Error: CSV header is missing", file=sys.stderr)
+        return 1
+
+    out_fields = list(dict.fromkeys(fieldnames + [
         "sofa_respiratory", "sofa_coagulation", "sofa_liver",
         "sofa_cardiovascular", "sofa_cns", "sofa_renal", "sofa_total",
-    ]
+    ]))
     out_rows = []
     for i, row in enumerate(rows, start=2):  # start=2 because row 1 is header
         try:
+            if None in row:
+                raise ValueError("More values than columns in CSV row")
+            if args.strict:
+                required = (
+                    "pao2_fio2", "mechanical_ventilation", "platelets",
+                    "bilirubin", "gcs",
+                )
+                missing = [
+                    key for key in required if not str(row.get(key) or "").strip()
+                ]
+                if missing:
+                    raise ValueError(
+                        "Missing required measurements: " + ", ".join(missing)
+                    )
+                vaso_keys = (
+                    "map_mmhg", "dopamine", "dobutamine",
+                    "norepinephrine", "epinephrine",
+                )
+                if not any(str(row.get(k) or "").strip() for k in vaso_keys):
+                    raise ValueError("Provide MAP or at least one vasoactive drug dose")
+                if not any(
+                    str(row.get(k) or "").strip()
+                    for k in ("creatinine", "urine_output_ml_day")
+                ):
+                    raise ValueError("Provide creatinine or 24-hour urine output")
             result = calculate_sofa(
                 pao2_fio2=_parse_float(row, "pao2_fio2", 400),
                 mechanical_ventilation=_parse_bool(row, "mechanical_ventilation"),
@@ -257,8 +301,8 @@ def cmd_batch(args: argparse.Namespace) -> int:
             writer = csv.DictWriter(f, fieldnames=out_fields)
             writer.writeheader()
             writer.writerows(out_rows)
-    except PermissionError:
-        print(f"Error: Permission denied writing: {args.output}", file=sys.stderr)
+    except OSError as exc:
+        print(f"Error writing output CSV: {exc}", file=sys.stderr)
         return 1
 
     print(f"Processed {len(out_rows)} patients -> {args.output}")
@@ -322,7 +366,13 @@ def build_parser() -> argparse.ArgumentParser:
     # batch subcommand
     p_batch = sub.add_parser("batch", help="Batch process CSV of patient data")
     p_batch.add_argument("-i", "--input", required=True, help="Input CSV file")
-    p_batch.add_argument("-o", "--output", default="results.csv", help="Output CSV file")
+    p_batch.add_argument(
+        "-o", "--output", default="results.csv", help="Output CSV file"
+    )
+    p_batch.add_argument(
+        "--strict", action="store_true",
+        help="Reject missing SOFA measurements instead of assuming normal values",
+    )
 
     return parser
 
@@ -342,7 +392,11 @@ def main(argv=None) -> int:
         "sepsis": cmd_sepsis,
         "batch": cmd_batch,
     }
-    return handlers[args.command](args)
+    try:
+        return handlers[args.command](args)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
