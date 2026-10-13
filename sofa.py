@@ -275,9 +275,11 @@ class SofaResult:
     total: int = field(init=False)
 
     def __post_init__(self) -> None:
-        for name in ("respiratory", "coagulation", "liver", "cardiovascular", "cns", "renal"):
+        systems = ("respiratory", "coagulation", "liver", "cardiovascular", "cns", "renal")
+        for name in systems:
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 4:
+            if (isinstance(value, bool) or not isinstance(value, int)
+                    or not 0 <= value <= 4):
                 raise ValueError(f"{name} must be an integer score between 0 and 4")
         self.total = (
             self.respiratory
