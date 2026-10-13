@@ -22,18 +22,18 @@ import unittest
 from pathlib import Path
 
 from sofa import (
-    score_respiration,
-    score_coagulation,
-    score_liver,
+    assess_sepsis3,
+    calculate_qsofa,
+    calculate_sofa,
+    QsofaResult,
     score_cardiovascular,
     score_cns,
+    score_coagulation,
+    score_liver,
     score_renal,
-    calculate_sofa,
-    calculate_qsofa,
+    score_respiration,
     sofa_delta,
-    assess_sepsis3,
     SofaResult,
-    QsofaResult,
 )
 
 
@@ -911,9 +911,10 @@ class TestCLI(unittest.TestCase):
     """Smoke tests for the CLI entry point."""
 
     def test_sofa_command(self):
-        from cli import main
-        import io
         import contextlib
+        import io
+
+        from cli import main
 
         f = io.StringIO()
         with contextlib.redirect_stdout(f):
@@ -924,9 +925,10 @@ class TestCLI(unittest.TestCase):
         self.assertIn("SOFA Score: 0/24", output)
 
     def test_sofa_json_output(self):
-        from cli import main
-        import io
         import contextlib
+        import io
+
+        from cli import main
 
         f = io.StringIO()
         with contextlib.redirect_stdout(f):
@@ -937,9 +939,10 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(parsed["total"], 0)
 
     def test_qsofa_command(self):
-        from cli import main
-        import io
         import contextlib
+        import io
+
+        from cli import main
 
         f = io.StringIO()
         with contextlib.redirect_stdout(f):
@@ -951,9 +954,10 @@ class TestCLI(unittest.TestCase):
         self.assertIn("qSOFA >= 2", output)
 
     def test_qsofa_json_output(self):
-        from cli import main
-        import io
         import contextlib
+        import io
+
+        from cli import main
 
         f = io.StringIO()
         with contextlib.redirect_stdout(f):
@@ -964,9 +968,10 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(parsed["score"], 0)
 
     def test_no_command_shows_help(self):
-        from cli import main
-        import io
         import contextlib
+        import io
+
+        from cli import main
 
         f = io.StringIO()
         with contextlib.redirect_stdout(f):
@@ -976,6 +981,7 @@ class TestCLI(unittest.TestCase):
     def test_batch_command(self):
         import os
         import tempfile
+
         from cli import main
 
         csv_content = (
@@ -991,8 +997,8 @@ class TestCLI(unittest.TestCase):
 
         out_path = inp_path.replace(".csv", "_out.csv")
         try:
-            import io
             import contextlib
+            import io
             f = io.StringIO()
             with contextlib.redirect_stdout(f):
                 rc = main(["batch", "-i", inp_path, "-o", out_path])
@@ -1106,9 +1112,10 @@ class TestBatchCLI(unittest.TestCase):
     """Test batch command error handling."""
 
     def test_batch_missing_file(self):
-        from cli import main
-        import io
         import contextlib
+        import io
+
+        from cli import main
 
         f = io.StringIO()
         with contextlib.redirect_stdout(f):
@@ -1116,11 +1123,12 @@ class TestBatchCLI(unittest.TestCase):
         self.assertEqual(rc, 1)
 
     def test_batch_invalid_csv_data(self):
-        from cli import main
+        import contextlib
+        import io
         import os
         import tempfile
-        import io
-        import contextlib
+
+        from cli import main
 
         # CSV with invalid numeric data
         csv_content = "pao2_fio2,platelets,gcs\nnot_a_number,200,15\n"
@@ -1142,11 +1150,12 @@ class TestBatchCLI(unittest.TestCase):
                 os.unlink(out_path)
 
     def test_batch_valid_csv_still_works(self):
-        from cli import main
+        import contextlib
+        import io
         import os
         import tempfile
-        import io
-        import contextlib
+
+        from cli import main
 
         csv_content = (
             "pao2_fio2,platelets,bilirubin,gcs\n"
