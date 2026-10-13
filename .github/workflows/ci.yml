@@ -28,7 +28,7 @@ jobs:
       - name: Check Python syntax and lint
         run: |
           python -m compileall -q sofa.py cli.py test_sofa.py
-          ruff check . --select E,F,W
+          ruff check . --select E,F,W,I
   browser-input:
     runs-on: ubuntu-latest
     steps:
