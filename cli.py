@@ -16,11 +16,11 @@ from pathlib import Path
 from typing import Optional
 
 from sofa import (
-    calculate_sofa,
-    calculate_qsofa,
-    sofa_delta,
-    assess_sepsis3,
     SofaResult,
+    assess_sepsis3,
+    calculate_qsofa,
+    calculate_sofa,
+    sofa_delta,
 )
 
 
