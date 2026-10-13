@@ -17,7 +17,9 @@ Uses unittest (stdlib only). Run with:
 """
 import csv
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from sofa import (
     score_respiration,
@@ -32,7 +34,6 @@ from sofa import (
     assess_sepsis3,
     SofaResult,
     QsofaResult,
-    Sepsis3Result,
 )
 
 
@@ -1169,6 +1170,85 @@ class TestBatchCLI(unittest.TestCase):
             os.unlink(inp_path)
             if os.path.exists(out_path):
                 os.unlink(out_path)
+
+
+
+# ======================================================================
+# Regression coverage for input safety and batch handling
+# ======================================================================
+class TestSafetyRegressions(unittest.TestCase):
+    def test_reject_non_finite_measurements(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            for scorer in (
+                score_respiration,
+                score_coagulation,
+                score_liver,
+            ):
+                with self.subTest(value=value, scorer=scorer.__name__):
+                    with self.assertRaises(ValueError):
+                        scorer(value)
+            with self.assertRaises(ValueError):
+                score_renal(creatinine=value)
+            with self.assertRaises(ValueError):
+                score_cardiovascular(norepinephrine=value)
+            with self.assertRaises(ValueError):
+                calculate_qsofa(respiratory_rate=value)
+
+    def test_reject_non_integer_gcs_and_invalid_ventilation(self):
+        for value in (14.5, float("nan"), True, "14"):
+            with self.subTest(gcs=value), self.assertRaises(ValueError):
+                score_cns(value)
+        with self.assertRaises(ValueError):
+            score_respiration(90, mechanical_ventilation="false")
+        with self.assertRaises(ValueError):
+            SofaResult(0, 0, 0, 0, 0, 5)
+
+    def test_batch_rejects_bad_boolean_and_fractional_gcs(self):
+        from cli import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "data.csv"
+            dest = Path(directory) / "result.csv"
+            for invalid_row in (
+                "450,perhaps,250,0.5,15",
+                "450,no,250,0.5,14.8",
+                "nan,no,250,0.5,15",
+            ):
+                path.write_text(
+                    "pao2_fio2,mechanical_ventilation,platelets,bilirubin,gcs\n"
+                    + invalid_row + "\n",
+                    encoding="utf-8",
+                )
+                self.assertEqual(main(["batch", "-i", str(path), "-o", str(dest)]), 1)
+                self.assertFalse(dest.exists())
+
+    def test_batch_rejects_overwriting_source(self):
+        from cli import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.csv"
+            original = "pao2_fio2,platelets\\n450,250\n"
+            path.write_text(original, encoding="utf-8")
+            self.assertEqual(main(["batch", "-i", str(path), "-o", str(path)]), 1)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_strict_batch_requires_clinical_inputs(self):
+        from cli import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.csv"
+            dest = Path(directory) / "out.csv"
+            path.write_text("pao2_fio2,platelets,gcs\\n450,250,15\n", encoding="utf-8")
+            self.assertEqual(
+                main(["batch", "-i", str(path), "-o", str(dest), "--strict"]),
+                1,
+            )
+            self.assertFalse(dest.exists())
+
+    def test_single_patient_invalid_input_is_handled(self):
+        from cli import main
+
+        self.assertEqual(main(["sofa", "--pao2-fio2", "nan"]), 2)
 
 
 if __name__ == "__main__":
