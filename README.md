@@ -46,9 +46,12 @@ python cli.py sofa --pao2-fio2 280 --platelets 160 --bilirubin 0.8 \
 # qSOFA risk stratification
 python cli.py qsofa --respiratory-rate 26 --gcs 13 --systolic-bp 95
 
-# Operational Sepsis-3 criteria using supplied baseline measurements
+# Operational Sepsis-3 criteria with an explicitly supplied reference baseline
 python cli.py sepsis --suspected-infection --pao2-fio2 180 \
-  --platelets 80 --gcs 10 --creatinine 3.0
+  --platelets 80 --gcs 10 --creatinine 3.0 \
+  --baseline-pao2-fio2 420 --baseline-platelets 220 \
+  --baseline-bilirubin 0.8 --baseline-map 80 --baseline-gcs 15 \
+  --baseline-creatinine 0.9
 
 # Batch CSV (strict mode rejects missing key measurements)
 python cli.py batch -i sample.csv -o results.csv --strict
